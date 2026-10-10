@@ -1,0 +1,28 @@
+version: "3.9"
+
+services:
+  dev:
+    build:
+      context: .
+      args:
+        UID: ${HOST_UID:-1000}
+        GID: ${HOST_GID:-1000}
+    image: survive-dev
+    privileged: true
+    volumes:
+      - .:/workspace
+      - /dev:/dev
+      - /run/udev:/run/udev:ro
+      - pio-cache:/home/dev/.platformio
+      - flutter-cache:/home/dev/.pub-cache
+      - gradle-cache:/home/dev/.gradle
+      - adb-keys:/home/dev/.android
+    stdin_open: true
+    tty: true
+    working_dir: /workspace
+
+volumes:
+  pio-cache:
+  flutter-cache:
+  gradle-cache:
+  adb-keys:
