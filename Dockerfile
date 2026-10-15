@@ -53,10 +53,18 @@ RUN flutter precache --web --android 2>/dev/null
 
 RUN pio pkg install --global -p "espressif32" 2>&1 | tail -2 || pio pkg install --global -p "espressif32" --skip-dependencies 2>&1 | tail -2 || true
 
+RUN PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${FLUTTER_HOME}/bin:${PATH}" \
+    flutter --version && \
+    pio --version && \
+    echo "Tools verified"
+
 USER root
-COPY <<'ENTRYPOINT' /entrypoint.sh
+RUN cat > /entrypoint.sh << 'EOF'
 #!/bin/bash
 set -e
+export PATH="${PATH}:/opt/flutter/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"
+export FLUTTER_HOME=/opt/flutter
+export ANDROID_HOME=/opt/android-sdk
 if [ -d /workspace ]; then
   WUID=$(stat -c "%u" /workspace 2>/dev/null || echo "0")
   WGID=$(stat -c "%g" /workspace 2>/dev/null || echo "0")
@@ -64,13 +72,12 @@ if [ -d /workspace ]; then
     usermod -u "$WUID" dev 2>/dev/null
     groupmod -g "$WGID" dev 2>/dev/null || true
     chown -R dev:dev /home/dev 2>/dev/null
-    chown -R dev:dev /opt/flutter /opt/android-sdk 2>/dev/null || true
   fi
 fi
 [ -d /sys/class/ ] && udevadm control --reload-rules 2>/dev/null || true
 adb start-server 2>/dev/null || true
-exec su - dev -c "$*"
-ENTRYPOINT
+exec su - dev
+EOF
 RUN chmod +x /entrypoint.sh
 
 WORKDIR /workspace

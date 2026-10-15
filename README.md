@@ -3,7 +3,8 @@
 ### Linux
 
 ```bash
-./enter.sh
+./enter.sh            # Debian / Ubuntu / WSL2
+./enter-arch.sh       # Arch Linux
 ```
 
 First run builds the Docker image (~5 min). After that it starts instantly.
