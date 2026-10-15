@@ -63,7 +63,6 @@ Then in Docker Desktop: Settings -> Resources -> WSL Integration -> enable Ubunt
 winget install dorssel.usbipd-win
 usbipd wsl list
 usbipd wsl attach --busid <BUSID>
-enter
 ```
 
 ## Full removal
