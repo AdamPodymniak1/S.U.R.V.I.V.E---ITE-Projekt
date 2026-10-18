@@ -41,8 +41,17 @@ RUN groupadd -f -g ${GID} ${USER} \
     && echo "${USER} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
     && chown -R ${USER}:${USER} /opt/android-sdk /opt/flutter
 
+RUN echo 'PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/flutter/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"' >> /etc/environment
+RUN echo 'FLUTTER_HOME=/opt/flutter' >> /etc/environment
+RUN echo 'ANDROID_HOME=/opt/android-sdk' >> /etc/environment
+
 USER ${USER}
 RUN mkdir -p /home/${USER}/.platformio
+
+RUN echo 'export PATH="$PATH:/opt/flutter/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"' >> /home/${USER}/.bashrc
+RUN echo 'export FLUTTER_HOME=/opt/flutter' >> /home/${USER}/.bashrc
+RUN echo 'export ANDROID_HOME=/opt/android-sdk' >> /home/${USER}/.bashrc
+RUN printf '[ -d /workspace/survive_app ] && cd /workspace/survive_app || true\n' >> /home/${USER}/.profile
 
 RUN yes | sdkmanager --sdk_root=${ANDROID_HOME} --licenses 2>/dev/null
 RUN sdkmanager --sdk_root=${ANDROID_HOME} "platforms;android-34" "build-tools;34.0.0" "platform-tools" 2>&1 | tail -1
@@ -50,6 +59,8 @@ RUN sdkmanager --sdk_root=${ANDROID_HOME} "platforms;android-34" "build-tools;34
 RUN flutter config --android-sdk ${ANDROID_HOME} 2>/dev/null
 RUN flutter doctor --android-licenses 2>/dev/null
 RUN flutter precache --web --android 2>/dev/null
+
+RUN git config --global --add safe.directory /opt/flutter
 
 RUN pio pkg install --global -p "espressif32" 2>&1 | tail -2 || pio pkg install --global -p "espressif32" --skip-dependencies 2>&1 | tail -2 || true
 
@@ -62,9 +73,6 @@ USER root
 RUN cat > /entrypoint.sh << 'EOF'
 #!/bin/bash
 set -e
-export PATH="${PATH}:/opt/flutter/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"
-export FLUTTER_HOME=/opt/flutter
-export ANDROID_HOME=/opt/android-sdk
 if [ -d /workspace ]; then
   WUID=$(stat -c "%u" /workspace 2>/dev/null || echo "0")
   WGID=$(stat -c "%g" /workspace 2>/dev/null || echo "0")
@@ -76,7 +84,11 @@ if [ -d /workspace ]; then
 fi
 [ -d /sys/class/ ] && udevadm control --reload-rules 2>/dev/null || true
 adb start-server 2>/dev/null || true
-exec su - dev
+if [ $# -eq 0 ]; then
+  exec su - dev
+else
+  exec su - dev -c "cd /workspace/survive_app && $*"
+fi
 EOF
 RUN chmod +x /entrypoint.sh
 

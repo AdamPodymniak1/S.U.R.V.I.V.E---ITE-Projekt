@@ -1,30 +1,43 @@
-## Quick start
+# S.U.R.V.I.V.E
 
-### Linux
+Tanie urządzenie LoRa (Meshtastic) z lokalizacją bez GPS i przesyłaniem danych o zagrożeniach w strefach wojennych.
 
-```bash
-./enter.sh            # Debian / Ubuntu / WSL2
-./enter-arch.sh       # Arch Linux
+**Grupa 6D:** Adam Podymniak, Karolina Rutkowska, Bartosz Sikora
+
+---
+
+## Repo
+
+```
+├── Dockerfile
+├── docker-compose.yml
+├── enter.sh
+├── enter-arch.sh
+├── enter.cmd
+├── meshtastic-firmware/
+├── survive_app/
+└── PLAN.md
 ```
 
-First run builds the Docker image (~5 min). After that it starts instantly.
+---
+
+## Starting the dev environment
+
+```bash
+./enter.sh            # Linux
+./enter-arch.sh       # Arch
+enter                 # Windows (cmd)
+```
+
+First run builds the Docker image. Takes about 5 minutes. Every time after is instant.
+
+The container has everything pre-installed: PlatformIO 6.2, Flutter 3.16, Android SDK 34, Java 17, ADB, picocom.
 
 ---
 
-## What's inside
+## Building firmware
 
-| Tool | What for |
-|---|---|
-| **PlatformIO** | Build & flash firmware to ESP32 |
-| **Flutter SDK 3.16** | Build & run the mobile app |
-| **Android SDK 34** | Compile APKs |
-| **Java 17** | Required by Android |
-| **ADB** | Talk to Android phones over USB |
-| **picocom** | Monitor ESP32 serial output |
-
----
-
-## Firmware - building and flashing
+The container starts in `/workspace/survive_app`. For firmware work:
 
 ```bash
 cd /workspace/meshtastic-firmware
@@ -33,42 +46,65 @@ pio run -e tbeam -t upload --upload-port /dev/ttyUSB0
 pio device monitor -p /dev/ttyUSB0 -b 115200
 ```
 
+Other ESP32-WROOM boards: `tlora-v2-1-1_6`, `heltec-v1`, `heltec-v2`, `heltec-v2.1`.
+
 ---
 
-## Flutter app - building and testing
+## Running the Flutter app
+
+Commands run from inside the container. The working directory is already set to `/workspace/survive_app`:
 
 ```bash
-cd /workspace/survive_app
-flutter build apk
 flutter devices
 flutter run
+flutter run -d DEVICE_ID
+flutter build apk
 flutter test
 ```
 
+If the app crashes with `ClassNotFoundException`, run `flutter clean && flutter run` once.
+
 ---
 
-## WSL2 for USB
+## Windows - USB devices
 
-Docker Desktop on Windows can't see USB. For that we use WSL2.
+Docker Desktop on Windows can't see USB hardware directly. You need WSL2 and usbipd-win.
+
+**One time:**
 
 ```powershell
-# Ubuntu or any other distro (i use clean Debian, but Ubuntu should be good too):
 wsl --install -d Ubuntu
 ```
 
-Then in Docker Desktop: Settings -> Resources -> WSL Integration -> enable Ubuntu.
+Then enable WSL2 integration in Docker Desktop: Settings → Resources → WSL Integration → enable your distro.
 
 ```powershell
-# Each time you plug in USB (both usbipd for ESP and mobile):
 winget install dorssel.usbipd-win
-usbipd wsl list
-usbipd wsl attach --busid <BUSID>
 ```
 
-## Full removal
+**Every time you plug in a device:**
+
+Run PowerShell as Administrator:
+
+```powershell
+usbipd list
+usbipd bind --busid <BUSID>
+usbipd attach --wsl <DISTRO> --busid <BUSID>
+```
+
+Now `enter.cmd` will see the device.
+
+**If ADB returns nothing:**
+- Check `usbipd list` - must say "Attached", not "Shared" or "Not shared"
+- Reconnect the USB cable and run attach again
+- On Xiaomi/POCO phones: enable "Install via USB" in Developer Options
+
+---
+
+## Removing everything
 
 ```bash
 docker compose down --rmi all -v
 ```
 
-And then WLS2 if you don't neet it later. Should be good. (Will change if not, but in the future)
+Uninstall usbipd-win from Windows Add or Remove Programs if you want it gone completely.
