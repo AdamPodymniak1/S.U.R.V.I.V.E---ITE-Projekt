@@ -597,7 +597,9 @@ Alerty mają priorytety (krytyczny / ostrzeżenie / informacja), a krytyczne wym
 
 ---
 
-# 9. Omówienie 4 przypadków użycia
+# 9. Omówienie 5 przypadków użycia (User Stories)
+
+> **US-1** Ustalenie pozycji bez GPS · **US-2** Zgłoszenie zagrożenia · **US-3** Aktualizacja stanu szpitala polowego · **US-4** Ewakuacja i SOS · **US-5** Zarządzanie zaufanymi węzłami
 
 ## Ustalenie pozycji bez GPS
 
@@ -642,3 +644,576 @@ Alerty mają priorytety (krytyczny / ostrzeżenie / informacja), a krytyczne wym
 | **Scenariusz główny (SOS)**   | 1) Przytrzymanie przycisku SOS 3 s. 2) Wysłanie pakietu `SOS_BEACON` o najwyższym priorytecie z pozycją. 3) Węzły w sieci przekazują dalej. 4) Odbiorca potwierdza (ACK). 5) Nadawca widzi status „Pomoc powiadomiona". |
 | **Scenariusze alternatywne**  | trasa zamknięta/wygasła -> propozycja objazdu; brak potwierdzenia SOS -> powtarzanie z backoffem                                                                                                                        |
 | **Warunki końcowe**           | użytkownik dotarł do punktu ewakuacji lub SOS potwierdzony                                                                                                                                                              |
+
+## Zarządzanie zaufanymi węzłami (US-5)
+
+**Historia użytkownika:** _Jako cywil lub wolontariusz chcę wskazywać węzły zaufane i blokować węzły zakłócające, aby fałszywe lub spamujące dane nie zalewały mojej mapy ani nie zajmowały pasma radiowego._
+
+| Pole                         | Opis                                                                                                                                                                                                                                                                                                  |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Aktor**                    | cywil / wolontariusz / koordynator NGO                                                                                                                                                                                                                                                                |
+| **Cel**                      | kontrola nad tym, od których węzłów przyjmowane są dane                                                                                                                                                                                                                                               |
+| **Warunki wstępne**          | aplikacja połączona z węzłem (BLE); w pobliżu lub w historii są co najmniej 2 inne węzły                                                                                                                                                                                                              |
+| **Scenariusz główny**        | 1) Użytkownik otwiera ekran S20 „Zaufane węzły". 2) Widzi listę węzłów z krótkim ID, poziomem zaufania, liczbą pakietów/min i czasem ostatniego kontaktu. 3) Oznacza węzeł jako zaufany (whitelist) lub zablokowany (blacklist). 4) Zmiana zapisuje się lokalnie (LittleFS na węźle, SQLite w aplikacji). 5) Dane od zablokowanego węzła znikają z mapy, a nowe pakiety są odrzucane przed parsowaniem. |
+| **Scenariusze alternatywne** | węzeł przekroczył próg spamu (> N pakietów/min) -> automatyczna blokada + alert `SPAM_NODE_BLOCKED` z opcją cofnięcia; użytkownik cofa blokadę -> węzeł znów akceptowany; brak BLE -> zmiana w kolejce, zastosowana po połączeniu                                                                    |
+| **Warunki końcowe**          | listy zaufania zsynchronizowane między aplikacją a węzłem; ruch od zablokowanych węzłów nie trafia do kolejki ani na mapę                                                                                                                                                                              |
+
+**Kryteria akceptacji (Given/When/Then):**
+
+- _Given_ węzeł wysyła > N pakietów/min, _When_ próg zostaje przekroczony, _Then_ węzeł jest ignorowany, a użytkownik dostaje alert z przyciskiem „Cofnij".
+- _Given_ zablokowany węzeł, _When_ użytkownik cofa blokadę, _Then_ kolejne pakiety są przyjmowane i walidowane jak zwykle.
+- _Given_ restart urządzenia, _When_ węzeł się uruchamia, _Then_ whitelist i blacklist są odtworzone z pamięci trwałej.
+
+---
+
+# 10. Diagramy przypadków użycia (UML Use Case)
+
+Diagramy w notacji UML, zapisane w **PlantUML** (UML Use Case nie ma natywnego odpowiednika w Mermaid). Zakres jest taki sam jak historii US-1...US-5 z sekcji 9. Relacje `<<include>>` oznaczają obowiązkowy fragment zachowania, a `<<extend>>` zachowanie opcjonalne lub warunkowe.
+
+## 10.1 Diagram ogólny systemu
+
+```plantuml
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+skinparam actorStyle awesome
+
+actor "Cywil" as Civ
+actor "Wolontariusz" as Vol
+actor "Lekarz / koordynator NGO" as Doc
+actor "Węzeł LoRa (mesh)" as Node <<system>>
+actor "Odbiorca SOS (służby)" as Rescuer
+
+rectangle "System S.U.R.V.I.V.E" {
+  usecase "UC1: Ustal pozycję bez GPS\n(US-1)" as UC1
+  usecase "UC2: Zgłoś zagrożenie\n(US-2)" as UC2
+  usecase "UC3: Zaktualizuj stan\nszpitala polowego\n(US-3)" as UC3
+  usecase "UC4: Zaplanuj ewakuację\n(US-4)" as UC4
+  usecase "UC5: Wyślij SOS\n(US-4)" as UC5
+  usecase "UC6: Zarządzaj zaufanymi\nwęzłami (US-5)" as UC6
+
+  usecase "Wykonaj ranging\n(SX1280)" as UCr
+  usecase "Zakoduj i wyślij pakiet\n(PoiCodec)" as UCs
+  usecase "Zwaliduj dane" as UCv
+  usecase "Zapisz w kolejce\n(brak BLE)" as UCq
+  usecase "Przeglądaj mapę POI" as UCm
+  usecase "Odblokuj PIN" as UCp
+  usecase "Potwierdź SOS (ACK)" as UCa
+  usecase "Zablokuj węzeł\nautomatycznie (spam)" as UCb
+}
+
+Civ --> UC1
+Civ --> UC2
+Civ --> UC4
+Civ --> UC5
+Civ --> UC6
+Vol --> UC2
+Vol --> UC6
+Doc --> UC3
+Doc --> UC6
+Rescuer --> UCa
+Node --> UCr
+Node --> UCs
+
+UC1 ..> UCr : <<include>>
+UC2 ..> UCv : <<include>>
+UC2 ..> UCs : <<include>>
+UC3 ..> UCv : <<include>>
+UC3 ..> UCs : <<include>>
+UC3 ..> UCp : <<include>>
+UC4 ..> UCm : <<include>>
+UC5 ..> UCs : <<include>>
+UCq ..> UC2 : <<extend>>
+UCq ..> UC3 : <<extend>>
+UCa ..> UC5 : <<extend>>
+UCb ..> UC6 : <<extend>>
+@enduml
+```
+
+## 10.2 Diagramy per user story
+
+**US-1: Ustalenie pozycji bez GPS**
+
+```plantuml
+@startuml
+left to right direction
+actor "Cywil / wolontariusz" as U
+actor "Węzeł kotwiczący (A, B, C)" as N <<system>>
+rectangle "US-1" {
+  usecase "Ustal pozycję bez GPS" as A
+  usecase "Rozgłoś POSITION_REQUEST" as B
+  usecase "Zmierz dystanse (ranging)" as C
+  usecase "Odfiltruj outliery (mediana + MAD)" as D
+  usecase "Wybierz najlepsze 2/3 węzły" as E
+  usecase "Oblicz pozycję (trilateracja)" as F
+  usecase "Pokaż okrąg niepewności" as G
+  usecase "Użyj ostatniej znanej pozycji" as H
+  usecase "Oznacz LOW_CONFIDENCE\n(tylko 2 węzły)" as I
+}
+U --> A
+N --> B
+N --> C
+A ..> B : <<include>>
+A ..> C : <<include>>
+A ..> D : <<include>>
+A ..> E : <<include>>
+A ..> F : <<include>>
+A ..> G : <<include>>
+H ..> A : <<extend>>\n[brak węzłów]
+I ..> A : <<extend>>\n[2 węzły]
+@enduml
+```
+
+**US-2: Zgłoszenie zagrożenia**
+
+```plantuml
+@startuml
+left to right direction
+actor "Cywil / wolontariusz" as U
+actor "Węzeł LoRa" as N <<system>>
+rectangle "US-2" {
+  usecase "Zgłoś zagrożenie" as A
+  usecase "Wybierz typ POI" as B
+  usecase "Wskaż punkt / obszar" as C
+  usecase "Ustaw TTL i notatkę" as D
+  usecase "Zwaliduj pola" as E
+  usecase "Zapisz lokalnie" as F
+  usecase "Zakoduj i wyślij do mesh" as G
+  usecase "Wskaż punkt ręcznie na mapie" as H
+  usecase "Zakolejkuj (brak BLE)" as I
+  usecase "Ponów wysyłkę (backoff)" as J
+}
+U --> A
+N --> G
+A ..> B : <<include>>
+A ..> C : <<include>>
+A ..> D : <<include>>
+A ..> E : <<include>>
+A ..> F : <<include>>
+A ..> G : <<include>>
+H ..> C : <<extend>>\n[brak pozycji]
+I ..> G : <<extend>>\n[brak BLE]
+J ..> G : <<extend>>\n[timeout]
+@enduml
+```
+
+**US-3: Aktualizacja stanu szpitala polowego**
+
+```plantuml
+@startuml
+left to right direction
+actor "Lekarz / koordynator NGO" as D
+actor "Użytkownicy w sieci" as V
+rectangle "US-3" {
+  usecase "Zaktualizuj stan zasobu" as A
+  usecase "Odblokuj PIN" as B
+  usecase "Edytuj miejsca i leki" as C
+  usecase "Wyślij jako NGO_VERIFIED" as E
+  usecase "Pokaż status wysyłki\n(w kolejce / wysłano / potwierdzono)" as F
+  usecase "Zaktualizuj ikonę i status na mapie" as G
+  usecase "Ponów wysyłkę" as H
+}
+D --> A
+V --> G
+A ..> B : <<include>>
+A ..> C : <<include>>
+A ..> E : <<include>>
+A ..> F : <<include>>
+G ..> E : <<extend>>
+H ..> E : <<extend>>\n[brak potwierdzenia]
+@enduml
+```
+
+**US-4: Ewakuacja i SOS**
+
+```plantuml
+@startuml
+left to right direction
+actor "Cywil (ewakuowany)" as C
+actor "Służby / wolontariusze" as R
+rectangle "US-4" {
+  usecase "Zaplanuj ewakuację" as A
+  usecase "Przeglądaj korytarze humanitarne" as B
+  usecase "Wybierz trasę\nomijającą zagrożenia" as D
+  usecase "Otrzymuj alerty o nowych zagrożeniach" as E
+  usecase "Zaproponuj objazd" as F
+  usecase "Wyślij SOS (przytrzymanie 3 s)" as G
+  usecase "Nadaj SOS_BEACON\n(najwyższy priorytet)" as H
+  usecase "Potwierdź SOS (ACK)" as I
+  usecase "Powtarzaj SOS z backoffem" as J
+  usecase "Anuluj SOS" as K
+}
+C --> A
+C --> G
+R --> I
+A ..> B : <<include>>
+A ..> D : <<include>>
+A ..> E : <<include>>
+F ..> A : <<extend>>\n[trasa zamknięta / wygasła]
+G ..> H : <<include>>
+I ..> G : <<extend>>
+J ..> G : <<extend>>\n[brak ACK]
+K ..> G : <<extend>>\n[w trakcie odliczania]
+@enduml
+```
+
+**US-5: Zarządzanie zaufanymi węzłami**
+
+```plantuml
+@startuml
+left to right direction
+actor "Użytkownik" as U
+actor "Węzeł LoRa" as N <<system>>
+rectangle "US-5" {
+  usecase "Zarządzaj zaufanymi węzłami" as A
+  usecase "Przeglądaj listę węzłów" as B
+  usecase "Dodaj do whitelisty" as C
+  usecase "Dodaj do blacklisty" as D
+  usecase "Cofnij blokadę" as E
+  usecase "Zablokuj automatycznie\n(próg spamu)" as F
+  usecase "Pokaż alert SPAM_NODE_BLOCKED" as G
+  usecase "Zapisz listy w pamięci trwałej" as H
+}
+U --> A
+N --> F
+A ..> B : <<include>>
+A ..> H : <<include>>
+C ..> A : <<extend>>
+D ..> A : <<extend>>
+E ..> A : <<extend>>
+F ..> G : <<include>>
+G ..> E : <<extend>>
+@enduml
+```
+
+---
+
+# 11. Diagram wymagań SysML i klasyfikacja ISO/IEC 25002 (SQuaRE)
+
+## 11.1 Klasyfikacja wymagań
+
+Rodzina **ISO/IEC 25000 (SQuaRE)** porządkuje jakość oprogramowania. **ISO/IEC 25002** opisuje model jakości i sposób jego użycia, a konkretne charakterystyki jakości produktu definiuje **ISO/IEC 25010**. Metryki bierzemy z **ISO/IEC 25023**. Wymagania dzielimy na:
+
+- **FR** (funkcjonalne): _co_ system robi, czyli charakterystyka _Functional suitability_ (kompletność, poprawność, adekwatność funkcjonalna).
+- **NFR** (niefunkcjonalne): _jak dobrze_ to robi, czyli pozostałe charakterystyki: _Performance efficiency, Reliability, Security, Usability, Compatibility, Maintainability, Portability_ oraz _Safety_ (w nowszej edycji 25010).
+
+## 11.2 Diagram wymagań (SysML Requirements Diagram)
+
+Diagram w Mermaid (`requirementDiagram`) odwzorowuje SysML: stereotypy wymagań, relacje `contains`, `derives`, `refines`, `satisfies`, `verifies`. Każde NFR ma przypisaną metrykę jako element typu `metric` i relację `verifies`.
+
+```mermaid
+requirementDiagram
+
+    requirement SYS_REQ {
+        id: SYS
+        text: "System zapewnia lacznosc i mape zagrozen bez GPS i internetu"
+        risk: high
+        verifymethod: demonstration
+    }
+
+    functionalRequirement FR1_Position {
+        id: FR1
+        text: "Ustalanie pozycji bez GPS metoda ranging i trilateracji (US-1)"
+        risk: high
+        verifymethod: test
+    }
+    functionalRequirement FR2_Report {
+        id: FR2
+        text: "Zglaszanie zagrozen z TTL i poziomem weryfikacji (US-2)"
+        risk: medium
+        verifymethod: test
+    }
+    functionalRequirement FR3_Resource {
+        id: FR3
+        text: "Aktualizacja stanu zasobow medycznych po odblokowaniu PIN (US-3)"
+        risk: medium
+        verifymethod: test
+    }
+    functionalRequirement FR4_Evac {
+        id: FR4
+        text: "Wyswietlanie korytarzy i planowanie trasy ewakuacji (US-4)"
+        risk: medium
+        verifymethod: demonstration
+    }
+    functionalRequirement FR5_SOS {
+        id: FR5
+        text: "Wysylanie SOS z potwierdzeniem ACK i ponawianiem (US-4)"
+        risk: high
+        verifymethod: test
+    }
+    functionalRequirement FR6_Trust {
+        id: FR6
+        text: "Zarzadzanie whitelista i blacklista oraz auto-blokada spamu (US-5)"
+        risk: medium
+        verifymethod: test
+    }
+
+    performanceRequirement NFR_Perf {
+        id: NFR1
+        text: "Wydajnosc: pozycja w 5 s, pakiet POI max 24 B (sr.), mapa 30 FPS"
+        risk: medium
+        verifymethod: test
+    }
+    requirement NFR_Avail {
+        id: NFR2
+        text: "Niezawodnosc - dostepnosc: wezel dziala co najmniej 99 procent czasu"
+        risk: high
+        verifymethod: analysis
+    }
+    requirement NFR_Fault {
+        id: NFR3
+        text: "Niezawodnosc - odtwarzalnosc: po restarcie MTTR do 30 s, brak utraty cache"
+        risk: high
+        verifymethod: test
+    }
+    requirement NFR_Sec {
+        id: NFR4
+        text: "Bezpieczenstwo: AES-256, PKC, CRC, rate limiting, odpornosc na jamming"
+        risk: high
+        verifymethod: test
+    }
+    requirement NFR_Use {
+        id: NFR5
+        text: "Uzytecznosc: SOS w 3 s, wysoki kontrast, zadanie bez przeszkolenia"
+        risk: medium
+        verifymethod: demonstration
+    }
+    requirement NFR_Maint {
+        id: NFR6
+        text: "Latwosc utrzymania: pokrycie testami jednostkowymi min 80 procent"
+        risk: low
+        verifymethod: analysis
+    }
+    designConstraint NFR_Port {
+        id: NFR7
+        text: "Przenosnosc: firmware ESP32 (Meshtastic), aplikacja Android i iOS (Flutter)"
+        risk: low
+        verifymethod: inspection
+    }
+
+    element M_Avail {
+        type: "metryka: Availability = MTBF / (MTBF + MTTR)"
+        docref: "ISO/IEC 25023"
+    }
+    element M_MTTR {
+        type: "metryka: MTTR - sredni czas naprawy / restartu"
+        docref: "ISO/IEC 25023"
+    }
+    element M_MTBF {
+        type: "metryka: MTBF - sredni czas miedzy awariami"
+        docref: "ISO/IEC 25023"
+    }
+    element M_Time {
+        type: "metryka: czas odpowiedzi, przepustowosc, FPS"
+        docref: "ISO/IEC 25023"
+    }
+    element M_Sec {
+        type: "metryka: odsetek odrzuconych pakietow z blednym CRC, liczba udanych ataków w testach"
+        docref: "ISO/IEC 25023"
+    }
+    element M_Task {
+        type: "metryka: czas i skutecznosc zadania, wynik SUS"
+        docref: "ISO/IEC 25023"
+    }
+    element M_Cov {
+        type: "metryka: pokrycie testami, zlozonosc cyklomatyczna"
+        docref: "ISO/IEC 25023"
+    }
+
+    SYS_REQ - contains -> FR1_Position
+    SYS_REQ - contains -> FR2_Report
+    SYS_REQ - contains -> FR3_Resource
+    SYS_REQ - contains -> FR4_Evac
+    SYS_REQ - contains -> FR5_SOS
+    SYS_REQ - contains -> FR6_Trust
+    SYS_REQ - contains -> NFR_Perf
+    SYS_REQ - contains -> NFR_Avail
+    SYS_REQ - contains -> NFR_Fault
+    SYS_REQ - contains -> NFR_Sec
+    SYS_REQ - contains -> NFR_Use
+    SYS_REQ - contains -> NFR_Maint
+    SYS_REQ - contains -> NFR_Port
+
+    NFR_Fault - derives -> NFR_Avail
+    NFR_Perf - refines -> FR1_Position
+    NFR_Sec - refines -> FR6_Trust
+    NFR_Use - refines -> FR5_SOS
+
+    M_Avail - satisfies -> NFR_Avail
+    M_MTBF - satisfies -> NFR_Avail
+    M_MTTR - satisfies -> NFR_Fault
+    M_Time - satisfies -> NFR_Perf
+    M_Sec - satisfies -> NFR_Sec
+    M_Task - satisfies -> NFR_Use
+    M_Cov - satisfies -> NFR_Maint
+```
+
+> Uwaga: w Mermaid relacja `satisfies` jest użyta do powiązania metryki z wymaganiem. Jeśli wymagana jest ścisła SysML-owa semantyka (np. w Papyrus lub Cameo), metrykę modeluje się jako `Block` z wartością (`ValueProperty`), a wymaganie weryfikuje się relacją `verify` z `TestCase`.
+
+## 11.3 Tabela wymagań z metrykami i celami
+
+**Wymagania funkcjonalne (Functional suitability)**
+
+| ID  | Wymaganie                                                              | Story | Metoda weryfikacji | Metryka (ISO/IEC 25023)                                 |
+| --- | ---------------------------------------------------------------------- | ----- | ------------------ | ------------------------------------------------------- |
+| FR1 | Ustalanie pozycji bez GPS (ranging, trilateracja, promień niepewności) | US-1  | test               | Functional correctness: błąd pozycji < 15 m (mediana)   |
+| FR2 | Zgłoszenie zagrożenia z TTL i poziomem weryfikacji                     | US-2  | test               | Functional completeness: 100% typów POI obsłużonych     |
+| FR3 | Aktualizacja stanu zasobu po PIN                                       | US-3  | test               | Functional completeness: 100% pól edytowalnych          |
+| FR4 | Korytarze humanitarne i trasa z godzinami bezpiecznymi                 | US-4  | demonstracja       | Functional appropriateness: ukończenie zadania ≥ 90%    |
+| FR5 | SOS z ACK i ponawianiem                                                | US-4  | test               | Functional correctness: ACK ≥ 95% w zasięgu             |
+| FR6 | Whitelist, blacklist, auto-blokada spamu                               | US-5  | test               | Functional correctness: 0 pakietów z blacklisty na mapie |
+
+**Wymagania niefunkcjonalne (NFR)**
+
+| ID   | Charakterystyka ISO/IEC 25010 | Podcharakterystyka        | Wymaganie                                          | Metryka                                       | Cel / próg                                      |
+| ---- | ----------------------------- | ------------------------- | -------------------------------------------------- | --------------------------------------------- | ----------------------------------------------- |
+| NFR1 | Performance efficiency        | Time behaviour            | Pozycja i dane muszą być dostępne szybko           | Czas ranging + obliczenia; czas dotarcia POI  | ≤ 5 s (6 węzłów); POI u drugiego telefonu ≤ 30 s |
+| NFR1 | Performance efficiency        | Resource utilization      | Mały pakiet i bezpieczne zużycie pamięci           | Średni rozmiar pakietu; RAM/flash             | ≤ 24 B (maks. 100 B); brak wycieków heap         |
+| NFR2 | Reliability                   | Availability              | Węzeł jest dostępny w sieci                        | **Availability = MTBF / (MTBF + MTTR)**       | ≥ 99% (cel dla węzła zasilanego z baterii/PV)    |
+| NFR2 | Reliability                   | Maturity                  | Rzadkie awarie                                     | **MTBF** (średni czas między awariami)        | ≥ 500 h pracy ciągłej w testach                  |
+| NFR3 | Reliability                   | Recoverability            | Szybki powrót po awarii i zanikach zasilania       | **MTTR** (średni czas naprawy / restartu)     | ≤ 30 s do pełnej sprawności; 0 utraconych rekordów (CRC + sekwencje) |
+| NFR3 | Reliability                   | Fault tolerance           | Degradacja zamiast awarii                          | Odsetek funkcji działających przy awarii radia | brak ranging → ostatnia pozycja z ostrzeżeniem   |
+| NFR4 | Security                      | Confidentiality, Integrity | Szyfrowanie, kontrola integralności, anty-replay   | Odsetek pakietów odrzuconych (zły CRC/replay); udane ataki w pentestach | 100% odrzuceń; 0 udanych ataków w scenariuszach |
+| NFR4 | Security                      | Resistance (jamming)      | Odporność na zakłócenia                            | Packet Delivery Ratio pod zakłócaniem         | ≥ 80% PDR przy zadanym SNR                       |
+| NFR5 | Usability                     | Operability               | SOS łatwy do uruchomienia w stresie                | Czas uruchomienia SOS; wynik SUS              | ≤ 3 s (przytrzymanie); SUS ≥ 80                  |
+| NFR5 | Usability                     | Accessibility             | Wysoki kontrast, duże elementy (rękawice)          | Kontrast WCAG; rozmiar celu dotykowego        | ≥ 7:1 (AAA); ≥ 48 dp                             |
+| NFR6 | Maintainability               | Testability               | Kod pokryty testami                                | Pokrycie linii / gałęzi                       | ≥ 80% (logika domenowa)                          |
+| NFR7 | Portability / Compatibility   | Adaptability, Interoperability | Zgodność z Meshtastic i platformami mobilnymi | Liczba platform zgodnych; zgodność protobuf   | Android + iOS; pakiety zgodne z Meshtastic       |
+
+---
+
+# 12. Wymagania w repozytorium: Specification-Driven Development (SDD)
+
+W SDD **specyfikacja jest źródłem prawdy**, a kod, testy i plany powstają z niej (często z pomocą agenta AI). Poniżej zapis wymagań S.U.R.V.I.V.E. w dwóch podejściach. Można użyć obu: BMAD do poziomu produktu (PRD, user stories), Spec Kit do poziomu implementacji poszczególnych funkcji.
+
+## 12.1 Struktura repozytorium
+
+```text
+survive/
+├── README.md
+├── .specify/                          # GitHub Spec Kit
+│   ├── memory/
+│   │   └── constitution.md            # zasady projektu (offline-first, 868 MHz, testy, bezpieczeństwo)
+│   ├── specs/
+│   │   ├── 001-position-without-gps/
+│   │   │   ├── spec.md                # CO i DLACZEGO (US-1)
+│   │   │   ├── plan.md                # JAK: architektura, technologie
+│   │   │   ├── data-model.md
+│   │   │   ├── contracts/             # np. pakiet POI, POSITION_REQUEST (protobuf)
+│   │   │   ├── research.md
+│   │   │   └── tasks.md               # lista zadań z plan.md
+│   │   ├── 002-hazard-report/
+│   │   ├── 003-field-hospital-update/
+│   │   ├── 004-evacuation-and-sos/
+│   │   └── 005-trusted-nodes/
+│   └── templates/
+├── docs/                              # BMAD
+│   ├── prd.md                         # Product Requirements Document (FR + NFR)
+│   ├── architecture.md
+│   ├── user-stories/
+│   │   ├── US-1-position-without-gps.md
+│   │   ├── US-2-hazard-report.md
+│   │   ├── US-3-field-hospital-update.md
+│   │   ├── US-4-evacuation-and-sos.md
+│   │   └── US-5-trusted-nodes.md
+│   └── diagrams/
+│       ├── use-cases.puml
+│       └── requirements.mmd
+├── firmware/                          # fork Meshtastic
+├── app/                               # Flutter
+└── tests/
+```
+
+## 12.2 Przykład: `.specify/specs/005-trusted-nodes/spec.md`
+
+```markdown
+# Feature Specification: Zarządzanie zaufanymi węzłami
+
+**Feature Branch**: `005-trusted-nodes`
+**Status**: Draft
+**Powiązania**: US-5, FR6, NFR4
+
+## User Scenarios & Testing
+
+### User Story 1 - Blokowanie węzła zakłócającego (Priority: P1)
+Jako cywil chcę zablokować węzeł wysyłający fałszywe dane, aby nie widzieć ich na mapie.
+
+**Why this priority**: dezinformacja o korytarzach może zagrozić życiu.
+**Independent Test**: dodanie węzła do blacklisty -> jego pakiety nie trafiają do kolejki ani na mapę.
+
+**Acceptance Scenarios**:
+1. **Given** węzeł wysyła > N pakietów/min, **When** próg zostaje przekroczony, **Then** węzeł jest ignorowany i pojawia się alert `SPAM_NODE_BLOCKED` z opcją „Cofnij".
+2. **Given** zablokowany węzeł, **When** użytkownik cofa blokadę, **Then** pakiety są ponownie przyjmowane.
+3. **Given** restart urządzenia, **When** węzeł się uruchamia, **Then** listy zaufania są odtworzone.
+
+### Edge Cases
+- Co jeśli użytkownik zablokuje węzeł będący jedynym łącznikiem do reszty mesh?
+- Co jeśli pamięć listy jest pełna (`E5001 STORAGE_FULL`)?
+
+## Requirements
+
+### Functional Requirements
+- **FR-001**: System MUSI przechowywać whitelistę i blacklistę lokalnie (węzeł + aplikacja).
+- **FR-002**: System MUSI automatycznie ignorować węzeł przekraczający próg pakietów/min.
+- **FR-003**: Użytkownik MUSI móc ręcznie cofnąć każdą blokadę.
+- **FR-004**: Pakiety od zablokowanych węzłów MUSZĄ być odrzucane przed parsowaniem.
+
+### Non-Functional Requirements
+- **NFR-001 (Security)**: odrzucenie pakietu z blacklisty w < 10 ms.
+- **NFR-002 (Reliability)**: listy przetrwają zanik zasilania (CRC + numer sekwencji), MTTR ≤ 30 s.
+
+### Key Entities
+- **Node**: id, positionSource, trustLevel (WHITELIST/NEUTRAL/BLACKLIST), packetsPerMin.
+
+## Success Criteria
+- 0 pakietów z blacklisty widocznych na mapie w teście 100 pakietów.
+- Cofnięcie blokady widoczne w ≤ 2 s.
+
+## Review & Acceptance Checklist
+- [ ] Brak oznaczeń [NEEDS CLARIFICATION]
+- [ ] Wymagania testowalne i jednoznaczne
+- [ ] Powiązane NFR mają metryki
+```
+
+## 12.3 Przykład BMAD: `docs/user-stories/US-5-trusted-nodes.md`
+
+```markdown
+# US-5: Zarządzanie zaufanymi węzłami
+
+**Epic**: Bezpieczeństwo i zaufanie
+**Status**: ready-for-dev
+**Priorytet**: Should have
+
+## Story
+Jako cywil lub wolontariusz
+chcę wskazywać węzły zaufane i blokować zakłócające,
+aby fałszywe lub spamujące dane nie zalewały mojej mapy.
+
+## Acceptance Criteria
+1. Węzeł przekraczający próg spamu jest blokowany automatycznie, a użytkownik widzi alert z opcją cofnięcia.
+2. Ręczne dodanie do whitelisty/blacklisty działa w ≤ 2 s.
+3. Listy zaufania są odtwarzane po restarcie.
+
+## Tasks
+- [ ] `TrustManager` (firmware C++) + testy Unity
+- [ ] Ekran S20 „Zaufane węzły" (Flutter)
+- [ ] Synchronizacja list app <-> węzeł (BLE)
+- [ ] Alert `SPAM_NODE_BLOCKED`
+
+## Dev Notes
+- Zgodność z `docs/architecture.md`, sekcja Zaufanie.
+- Wymagania powiązane: FR6, NFR4 (patrz `docs/prd.md`).
+
+## Traceability
+Use case: UC6 · Diagram: `docs/diagrams/use-cases.puml`
+```
+
+## 12.4 Śledzenie (traceability)
+
+|Story|Use case|Spec Kit|BMAD|Wymagania|
+|---|---|---|---|---|
+|US-1|UC1|`001-position-without-gps`|`US-1-...md`|FR1, NFR1, NFR3|
+|US-2|UC2|`002-hazard-report`|`US-2-...md`|FR2, NFR1, NFR4|
+|US-3|UC3|`003-field-hospital-update`|`US-3-...md`|FR3, NFR4|
+|US-4|UC4, UC5|`004-evacuation-and-sos`|`US-4-...md`|FR4, FR5, NFR2, NFR5|
+|US-5|UC6|`005-trusted-nodes`|`US-5-...md`|FR6, NFR4|

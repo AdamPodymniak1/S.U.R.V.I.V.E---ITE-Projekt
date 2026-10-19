@@ -8,14 +8,12 @@ ARG GID=1000
 
 RUN apt-get update -qq && apt-get install -y --no-install-recommends \
     curl wget ca-certificates unzip xz-utils git \
-    python3 python3-pip \
+    python3 python3-pip python3-venv \
     openjdk-17-jdk-headless \
     picocom udev sudo \
     && rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
-
-RUN pip3 install --no-cache-dir -q platformio
 
 ENV FLUTTER_HOME=/opt/flutter
 ENV PATH="${FLUTTER_HOME}/bin:${PATH}"
@@ -46,9 +44,12 @@ RUN echo 'FLUTTER_HOME=/opt/flutter' >> /etc/environment
 RUN echo 'ANDROID_HOME=/opt/android-sdk' >> /etc/environment
 
 USER ${USER}
-RUN mkdir -p /home/${USER}/.platformio
 
-RUN echo 'export PATH="$PATH:/opt/flutter/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"' >> /home/${USER}/.bashrc
+RUN python3 -m venv /home/${USER}/.platformio/penv && \
+    /home/${USER}/.platformio/penv/bin/pip install --no-cache-dir -q platformio uv
+
+ENV PATH="/home/${USER}/.platformio/penv/bin:${PATH}"
+RUN echo 'export PATH="$PATH:/home/dev/.platformio/penv/bin:/opt/flutter/bin:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"' >> /home/${USER}/.bashrc
 RUN echo 'export FLUTTER_HOME=/opt/flutter' >> /home/${USER}/.bashrc
 RUN echo 'export ANDROID_HOME=/opt/android-sdk' >> /home/${USER}/.bashrc
 RUN printf '[ -d /workspace/survive_app ] && cd /workspace/survive_app || true\n' >> /home/${USER}/.profile
@@ -62,9 +63,10 @@ RUN flutter precache --web --android 2>/dev/null
 
 RUN git config --global --add safe.directory /opt/flutter
 
-RUN pio pkg install --global -p "espressif32" 2>&1 | tail -2 || pio pkg install --global -p "espressif32" --skip-dependencies 2>&1 | tail -2 || true
+RUN /home/${USER}/.platformio/penv/bin/pio pkg install -p "espressif32" 2>&1 || \
+    /home/${USER}/.platformio/penv/bin/pio pkg install -p "espressif32" --skip-dependencies 2>&1 || true
 
-RUN PATH="${ANDROID_HOME}/cmdline-tools/latest/bin:${ANDROID_HOME}/platform-tools:${FLUTTER_HOME}/bin:${PATH}" \
+RUN PATH="/home/dev/.platformio/penv/bin:${PATH}" \
     flutter --version && \
     pio --version && \
     echo "Tools verified"
@@ -84,6 +86,7 @@ if [ -d /workspace ]; then
 fi
 [ -d /sys/class/ ] && udevadm control --reload-rules 2>/dev/null || true
 adb start-server 2>/dev/null || true
+export PATH="/home/dev/.platformio/penv/bin:$PATH"
 if [ $# -eq 0 ]; then
   exec su - dev
 else

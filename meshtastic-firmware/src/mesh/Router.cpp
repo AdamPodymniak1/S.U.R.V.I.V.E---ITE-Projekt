@@ -14,6 +14,7 @@
 #include "mesh-pb-constants.h"
 #include "meshUtils.h"
 #include "modules/RoutingModule.h"
+#include "modules/SurviveModule.h"
 #include <ErriezCRC32.h>
 #include <pb_decode.h>
 #include <pb_encode.h>
@@ -565,6 +566,12 @@ ErrorCode Router::send(meshtastic_MeshPacket *p)
     // p->from as the original sender, so do not rewrite their POSITION_APP payload.
     if (isBlockedEventCoordinatePacket(p)) {
         LOG_DEBUG("Suppress coordinate send on event (everyone) channel");
+        packetPool.release(p);
+        return meshtastic_Routing_Error_NOT_AUTHORIZED;
+    }
+
+    if (surviveModule && surviveModule->shouldSuppressPacket(p)) {
+        LOG_DEBUG("Suppressed by SurviveModule (survival mode)\n");
         packetPool.release(p);
         return meshtastic_Routing_Error_NOT_AUTHORIZED;
     }

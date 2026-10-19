@@ -4,6 +4,7 @@
 #include "modules/SystemCommandsModule.h"
 #endif
 #include "modules/StatusLEDModule.h"
+#include "modules/SurviveModule.h"
 #if !MESHTASTIC_EXCLUDE_REPLYBOT
 #include "ReplyBotModule.h"
 #endif
@@ -139,6 +140,7 @@ void setupModules()
     }
 #endif
     statusLEDModule = new StatusLEDModule();
+    surviveModule = new SurviveModule();
 #if !MESHTASTIC_EXCLUDE_REPLYBOT
     new ReplyBotModule();
 #endif
